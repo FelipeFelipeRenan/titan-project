@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: titan-ledger-core
+
+  # --- CONFIGURAÇÃO DE BANCO DE DADOS ---
+  datasource:
+    url: jdbc:postgresql://localhost:5432/titan_ledger
+    username: titan_user
+    password: titan_password
+    driver-class-name: org.postgresql.Driver
+
+  # --- JPA / HIBERNATE ---
+  jpa:
+    database: postgresql
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    # IMPORTANTE: Desligamos o ddl-auto porque quem manda no schema é o Flyway
+    hibernate:
+      ddl-auto: validate
+    show-sql: true # Útil para debug no começo
+    properties:
+      hibernate:
+        format_sql: true
+
+  # --- FLYWAY (MIGRAÇÕES) ---
+  flyway:
+    enabled: true
+    # Se o banco não estiver vazio, o Flyway reclama. Isso ajuda em dev.
+    baseline-on-migrate: true
+
+  # --- KAFKA (Preparo inicial) ---
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: titan-ledger-group
+      auto-offset-reset: earliest
