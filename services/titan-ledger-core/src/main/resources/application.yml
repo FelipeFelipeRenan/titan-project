@@ -1,3 +1,6 @@
+server:
+  port: 8081
+
 spring:
   application:
     name: titan-ledger-core
@@ -33,3 +36,13 @@ spring:
     consumer:
       group-id: titan-ledger-group
       auto-offset-reset: earliest
+
+management:
+  otlp:
+    metrics:
+      export:
+        enabled: false # Desliga o envio de métricas por enquanto
+  tracing:
+    export:
+      otlp:
+        enabled: false # Desliga o envio de traces por enquanto

@@ -38,19 +38,32 @@ services:
 
   # --- MESSAGE BROKER (KAFKA) ---
   # Usando versão Kraft (sem Zookeeper) para ser mais moderno e leve
+ # --- MESSAGE BROKER (KAFKA) ---
   kafka:
     image: apache/kafka:3.7.0
     container_name: titan_kafka
     ports:
       - "9092:9092"
     environment:
-      # Configuração para rodar localmente acessível de fora e de dentro do Docker
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      
+      # 1. Definimos QUEM pode conectar (Listeners)
+      # CONTROLLER: Porta de gestão interna (9093)
+      # EXTERNAL: Porta para seu PC (9092)
+      # INTERNAL: Porta para o Kafka UI e containers (29092)
+      KAFKA_LISTENERS: CONTROLLER://:9093,EXTERNAL://0.0.0.0:9092,INTERNAL://0.0.0.0:29092
+      
+      # 2. Definimos ONDE o cliente deve bater (Advertised Listeners)
+      # Se vier de fora -> localhost:9092
+      # Se vier de dentro -> kafka:29092
+      KAFKA_ADVERTISED_LISTENERS: EXTERNAL://localhost:9092,INTERNAL://kafka:29092
+      
+      # 3. Mapeamento de Segurança (Protocol Map)
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,INTERNAL:PLAINTEXT
+      
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
@@ -60,12 +73,14 @@ services:
     networks:
       - titan-network
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
-      interval: 30s
+      # Teste ajustado para o caminho correto do script na imagem apache/kafka
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 15s
 
-  # --- UI PARA O KAFKA (Opcional, mas útil para debug) ---
+  # --- UI PARA O KAFKA ---
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: titan_kafka_ui
@@ -73,7 +88,8 @@ services:
       - "8080:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      # IMPORTANTE: Aqui usamos o nome do serviço 'kafka' e a porta INTERNA '29092'
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
     depends_on:
       kafka:
         condition: service_healthy
