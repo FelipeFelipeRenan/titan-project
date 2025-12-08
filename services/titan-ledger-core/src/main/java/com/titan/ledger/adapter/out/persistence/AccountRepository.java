@@ -1,4 +1,4 @@
-package com.titan.ledger.adapter.out.persistency;
+package com.titan.ledger.adapter.out.persistence;
 
 import java.util.Optional;
 import java.util.UUID;

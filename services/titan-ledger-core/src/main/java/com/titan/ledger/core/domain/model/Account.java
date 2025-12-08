@@ -37,8 +37,7 @@ public class Account {
     public Account() {
     }
 
-    public Account(UUID id, String clientId, String currency) {
-        this.id = id;
+    public Account( String clientId, String currency) {
         this.clientId = clientId;
         this.currency = currency;
         this.balance = BigDecimal.ZERO;
