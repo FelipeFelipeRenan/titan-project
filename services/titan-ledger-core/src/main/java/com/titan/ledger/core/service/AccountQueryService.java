@@ -1,6 +1,8 @@
 package com.titan.ledger.core.service;
 
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +34,14 @@ public class AccountQueryService implements GetAccountBalanceUseCase {
                 .map(this::mapToResponse)
                 .orElseThrow(() -> new IllegalArgumentException("Account not found"));
     }
+
+
+    public List<AccountResponse> listAll(){
+        return accountRepository.findAll()
+            .stream()
+            .map(this::mapToResponse)
+            .collect(Collectors.toList());
+    }
     
     private AccountResponse mapToResponse(Account account) {
         return new AccountResponse(
@@ -42,4 +52,5 @@ public class AccountQueryService implements GetAccountBalanceUseCase {
             "ACTIVE"
         );
     }
+
 }
