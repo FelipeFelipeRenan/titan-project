@@ -16,7 +16,9 @@ import java.util.UUID;
 
 import com.titan.ledger.core.service.AccountQueryService;
 import com.titan.ledger.core.usecase.DepositUseCase;
+import com.titan.ledger.core.usecase.TransferFundsUseCase;
 import com.titan.ledger.core.usecase.dto.DepositCommand;
+import com.titan.ledger.core.usecase.dto.TransferFundsCommand;
 
 @RestController
 @RequestMapping("/api/v1/accounts")
@@ -26,14 +28,16 @@ public class AccountController {
     private final GetAccountBalanceUseCase getAccountBalanceUseCase;
     private final DepositUseCase depositUseCase;
     private final AccountQueryService accountQueryService;
+    private final TransferFundsUseCase transferFundsUseCase;
 
     public AccountController(CreateAccountUseCase createAccountUseCase,
             GetAccountBalanceUseCase getAccountBalanceUseCase, DepositUseCase depositUseCase,
-            AccountQueryService accountQueryService) {
+            AccountQueryService accountQueryService, TransferFundsUseCase transferFundsUseCase) {
         this.createAccountUseCase = createAccountUseCase;
         this.getAccountBalanceUseCase = getAccountBalanceUseCase;
         this.depositUseCase = depositUseCase;
         this.accountQueryService = accountQueryService;
+        this.transferFundsUseCase = transferFundsUseCase;
     }
 
     @GetMapping
@@ -73,5 +77,16 @@ public class AccountController {
         return ResponseEntity.ok().build();
     }
 
+    @PostMapping("/transfer")
+    public ResponseEntity<TransactionIdResponse> transfer(@RequestBody TransferRequest request){
+
+        TransferFundsCommand command = new TransferFundsCommand(request.fromAccountId(), request.toAccountId(), request.amount(), request.description());
+        
+        UUID transactionId = transferFundsUseCase.execute(command);
+
+        return ResponseEntity.ok(new TransactionIdResponse(transactionId));
+    }
     public record DepositRequest(BigDecimal amount, String description){}
+    public record TransferRequest(UUID fromAccountId, UUID toAccountId, BigDecimal amount, String description){}
+    public record TransactionIdResponse(UUID transactionId){} 
 }
