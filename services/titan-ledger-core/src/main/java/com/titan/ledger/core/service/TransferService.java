@@ -9,6 +9,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.titan.ledger.adapter.out.persistence.AccountRepository;
 import com.titan.ledger.adapter.out.persistence.LedgerRepository;
 import com.titan.ledger.adapter.out.persistence.TransactionRepository;
+import com.titan.ledger.core.domain.exception.AccountNotFoundException;
+import com.titan.ledger.core.domain.exception.InsufficientFundsException;
 import com.titan.ledger.core.domain.model.Account;
 import com.titan.ledger.core.domain.model.LedgerEntry;
 import com.titan.ledger.core.domain.model.OperationType;
@@ -47,10 +49,10 @@ public class TransferService implements TransferFundsUseCase {
                 
                 // Carregar as contas
                 Account account1 = accountRepository.findByIdForUpdate(firstLockId)
-                                .orElseThrow(() -> new IllegalArgumentException("Source account not found"));
+                                .orElseThrow(() -> new AccountNotFoundException("Source account not found"));
 
                 Account account2 = accountRepository.findByIdForUpdate(secondLockId)
-                                .orElseThrow(() -> new IllegalArgumentException("Target account not found"));
+                                .orElseThrow(() -> new AccountNotFoundException("Target account not found"));
 
 
                 Account fromAccount = command.fromAccountId().equals(account1.getId()) ? account1: account2;
@@ -60,7 +62,7 @@ public class TransferService implements TransferFundsUseCase {
 
                 // Validar saldo da conta que envia
                 if (fromAccount.getBalance().compareTo(command.amount()) < 0) {
-                        throw new IllegalStateException("Insufficient funds");
+                        throw new InsufficientFundsException("Insufficient funds");
                 }
 
                 // Criar header da transação

@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.titan.ledger.adapter.out.persistence.AccountRepository;
 import com.titan.ledger.adapter.out.persistence.LedgerRepository;
 import com.titan.ledger.adapter.out.persistence.TransactionRepository;
+import com.titan.ledger.core.domain.exception.AccountNotFoundException;
 import com.titan.ledger.core.domain.model.Account;
 import com.titan.ledger.core.domain.model.LedgerEntry;
 import com.titan.ledger.core.domain.model.OperationType;
@@ -38,7 +39,7 @@ public class DepositService implements DepositUseCase{
     public void execute(DepositCommand command) {
         // Buscar conta
         Account account = accountRepository.findById(command.accountId())
-                .orElseThrow(() -> new IllegalArgumentException("Account not found"));
+                .orElseThrow(() -> new AccountNotFoundException("Account not found"));
         
         // Criar transação
         Transaction transaction = new Transaction(
