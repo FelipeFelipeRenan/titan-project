@@ -59,6 +59,13 @@ public class TransferService implements TransferFundsUseCase {
 
                 Account toAccount = command.toAccountId().equals(account1.getId()) ? account1: account2;
 
+                if(!fromAccount.canTransact()){
+                        throw new IllegalStateException("Source account is " + fromAccount.getStatus());
+                }
+
+                if(!toAccount.canTransact()){
+                        throw new IllegalStateException("Target account is " + toAccount.getStatus());
+                }
 
                 // Validar saldo da conta que envia
                 if (fromAccount.getBalance().compareTo(command.amount()) < 0) {

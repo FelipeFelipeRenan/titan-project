@@ -4,14 +4,19 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.titan.ledger.adapter.out.persistence.AccountRepository;
+import com.titan.ledger.adapter.out.persistence.LedgerRepository;
 import com.titan.ledger.core.domain.exception.AccountNotFoundException;
 import com.titan.ledger.core.domain.model.Account;
+import com.titan.ledger.core.domain.model.LedgerEntry;
 import com.titan.ledger.core.usecase.GetAccountBalanceUseCase;
 import com.titan.ledger.core.usecase.dto.AccountResponse;
+import com.titan.ledger.core.usecase.dto.StatementEntryResponse;
 
 
 @Service
@@ -20,10 +25,12 @@ public class AccountQueryService implements GetAccountBalanceUseCase {
 
 
     private final AccountRepository accountRepository;
+    private final LedgerRepository ledgerRepository;
 
     
-    public AccountQueryService(AccountRepository accountRepository) {
+    public AccountQueryService(AccountRepository accountRepository, LedgerRepository ledgerRepository) {
         this.accountRepository = accountRepository;
+        this.ledgerRepository = ledgerRepository;
     }
 
 
@@ -51,6 +58,28 @@ public class AccountQueryService implements GetAccountBalanceUseCase {
             account.getCurrency(),
             account.getBalance(),
             "ACTIVE"
+        );
+    }
+
+    // extrato paginado
+    public Page<StatementEntryResponse> getStatement(UUID accountId, Pageable pageable){
+
+        if (!accountRepository.existsById(accountId)) {
+            throw new AccountNotFoundException("Account not found");
+        }
+
+        return ledgerRepository.findByAccount_Id(accountId, pageable)
+            .map(this::mapToStatementResponse);
+    }
+
+    private StatementEntryResponse mapToStatementResponse(LedgerEntry entry) {
+        return new StatementEntryResponse(
+            entry.getTransaction().getId(),
+            entry.getType().name(),
+            entry.getAmount(),
+            entry.getBalanceSnapshot(),
+            entry.getTransaction().getDescription(),
+            entry.getCreatedAt()
         );
     }
 

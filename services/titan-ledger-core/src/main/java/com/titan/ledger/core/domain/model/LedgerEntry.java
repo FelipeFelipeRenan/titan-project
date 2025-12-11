@@ -30,7 +30,7 @@ public class LedgerEntry {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "account_id", nullable = false)
-    private Account acconunt;
+    private Account account;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "operation_type", nullable = false)
@@ -48,10 +48,10 @@ public class LedgerEntry {
     public LedgerEntry() {
     }
 
-    public LedgerEntry(Transaction transaction, Account acconunt, OperationType type, BigDecimal amount,
+    public LedgerEntry(Transaction transaction, Account account, OperationType type, BigDecimal amount,
             BigDecimal balanceSnapshot) {
         this.transaction = transaction;
-        this.acconunt = acconunt;
+        this.account = account;
         this.type = type;
         this.amount = amount;
         this.balanceSnapshot = balanceSnapshot;
@@ -74,12 +74,12 @@ public class LedgerEntry {
         this.transaction = transaction;
     }
 
-    public Account getAcconunt() {
-        return acconunt;
+    public Account getaccount() {
+        return account;
     }
 
-    public void setAcconunt(Account acconunt) {
-        this.acconunt = acconunt;
+    public void setaccount(Account account) {
+        this.account = account;
     }
 
     public OperationType getType() {

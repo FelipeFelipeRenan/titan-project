@@ -6,6 +6,8 @@ import java.util.UUID;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -34,15 +36,20 @@ public class Account {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private AccountStatus status;
+
     public Account() {
     }
 
-    public Account( String clientId, String currency) {
+    public Account(String clientId, String currency) {
         this.clientId = clientId;
         this.currency = currency;
         this.balance = BigDecimal.ZERO;
         this.createdAt = Instant.now();
         this.updatedAt = Instant.now();
+        this.status = AccountStatus.ACTIVE;
     }
 
     public UUID getId() {
@@ -93,4 +100,15 @@ public class Account {
         this.updatedAt = updatedAt;
     }
 
+    public AccountStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(AccountStatus status) {
+        this.status = status;
+    }
+
+    public boolean canTransact() {
+        return this.status == AccountStatus.ACTIVE;
+    }
 }
