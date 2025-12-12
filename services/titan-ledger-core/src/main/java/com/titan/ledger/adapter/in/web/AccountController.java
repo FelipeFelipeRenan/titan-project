@@ -83,10 +83,13 @@ public class AccountController {
     }
 
     @PostMapping("/transfer")
-    public ResponseEntity<TransactionIdResponse> transfer(@RequestBody TransferRequest request) {
+    public ResponseEntity<TransactionIdResponse> transfer(
+        @RequestBody TransferRequest request,
+        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey 
+    ) {
 
         TransferFundsCommand command = new TransferFundsCommand(request.fromAccountId(), request.toAccountId(),
-                request.amount(), request.description());
+                request.amount(), request.description(), idempotencyKey);
 
         UUID transactionId = transferFundsUseCase.execute(command);
 

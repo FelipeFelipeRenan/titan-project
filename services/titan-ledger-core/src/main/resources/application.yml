@@ -46,3 +46,5 @@ management:
     export:
       otlp:
         enabled: false # Desliga o envio de traces por enquanto
+
+# Nível de Log para Debugar o Swagger

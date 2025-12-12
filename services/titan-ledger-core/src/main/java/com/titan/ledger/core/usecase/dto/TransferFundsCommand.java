@@ -7,7 +7,8 @@ public record TransferFundsCommand(
     UUID fromAccountId,
     UUID toAccountId,
     BigDecimal amount,
-    String description
+    String description,
+    String idempotencyKey
 ) {
     public TransferFundsCommand{
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {

@@ -7,11 +7,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.titan.ledger.adapter.out.persistence.AccountRepository;
+import com.titan.ledger.adapter.out.persistence.IdempotencyRepository;
 import com.titan.ledger.adapter.out.persistence.LedgerRepository;
 import com.titan.ledger.adapter.out.persistence.TransactionRepository;
 import com.titan.ledger.core.domain.exception.AccountNotFoundException;
 import com.titan.ledger.core.domain.exception.InsufficientFundsException;
 import com.titan.ledger.core.domain.model.Account;
+import com.titan.ledger.core.domain.model.IdempotencyKey;
 import com.titan.ledger.core.domain.model.LedgerEntry;
 import com.titan.ledger.core.domain.model.OperationType;
 import com.titan.ledger.core.domain.model.Transaction;
@@ -25,17 +27,42 @@ public class TransferService implements TransferFundsUseCase {
         private final AccountRepository accountRepository;
         private final TransactionRepository transactionRepository;
         private final LedgerRepository ledgerRepository;
+        private final IdempotencyRepository idempotencyRespository;
 
         public TransferService(AccountRepository accountRepository, TransactionRepository transactionRepository,
-                        LedgerRepository ledgerRepository) {
+                        LedgerRepository ledgerRepository, IdempotencyRepository idempotencyRespository) {
                 this.accountRepository = accountRepository;
                 this.transactionRepository = transactionRepository;
                 this.ledgerRepository = ledgerRepository;
+                this.idempotencyRespository = idempotencyRespository;
         }
 
         @Override
         @Transactional
         public UUID execute(TransferFundsCommand command) {
+
+                // idempotency check
+                if (command.idempotencyKey() != null) {
+                        return idempotencyRespository.findById(command.idempotencyKey())
+                                        .map(existing -> {
+                                                // --- CORREÇÃO AQUI ---
+                                                // O body agora é {"transactionId": "uuid"}, precisamos extrair o UUID.
+                                                // Como não queremos adicionar biblioteca de JSON só pra isso agora,
+                                                // vamos fazer um "parse de pedreiro" (substring) rápido.
+                                                String body = existing.getResponseBody();
+                                                String uuidString = body.replace("{\"transactionId\": \"", "")
+                                                                .replace("\"}", "");
+                                                return UUID.fromString(uuidString);
+                                                // ---------------------
+                                        })
+                                        .orElseGet(() -> processNewTransfer(command));
+                }
+
+                return processNewTransfer(command);
+
+        }
+
+        private UUID processNewTransfer(TransferFundsCommand command) {
 
                 // DEADLOCK PREVEMTION - ordenar locks por UUID
                 UUID firstLockId = command.fromAccountId().compareTo(command.toAccountId()) < 0
@@ -46,7 +73,6 @@ public class TransferService implements TransferFundsUseCase {
                                 ? command.toAccountId()
                                 : command.fromAccountId();
 
-                
                 // Carregar as contas
                 Account account1 = accountRepository.findByIdForUpdate(firstLockId)
                                 .orElseThrow(() -> new AccountNotFoundException("Source account not found"));
@@ -54,16 +80,15 @@ public class TransferService implements TransferFundsUseCase {
                 Account account2 = accountRepository.findByIdForUpdate(secondLockId)
                                 .orElseThrow(() -> new AccountNotFoundException("Target account not found"));
 
+                Account fromAccount = command.fromAccountId().equals(account1.getId()) ? account1 : account2;
 
-                Account fromAccount = command.fromAccountId().equals(account1.getId()) ? account1: account2;
+                Account toAccount = command.toAccountId().equals(account1.getId()) ? account1 : account2;
 
-                Account toAccount = command.toAccountId().equals(account1.getId()) ? account1: account2;
-
-                if(!fromAccount.canTransact()){
+                if (!fromAccount.canTransact()) {
                         throw new IllegalStateException("Source account is " + fromAccount.getStatus());
                 }
 
-                if(!toAccount.canTransact()){
+                if (!toAccount.canTransact()) {
                         throw new IllegalStateException("Target account is " + toAccount.getStatus());
                 }
 
@@ -113,8 +138,16 @@ public class TransferService implements TransferFundsUseCase {
                 ledgerRepository.save(debitEntry);
                 ledgerRepository.save(creditEntry);
 
+                if (command.idempotencyKey() != null) {
+
+                        String jsonBody = String.format("{\"transactionId\": \"%s\"}", transaction.getId());
+                        IdempotencyKey key = new IdempotencyKey(
+                                        command.idempotencyKey(),
+                                        200,
+                                        jsonBody);
+                        idempotencyRespository.save(key);
+                }
+
                 return transaction.getId();
-
         }
-
 }

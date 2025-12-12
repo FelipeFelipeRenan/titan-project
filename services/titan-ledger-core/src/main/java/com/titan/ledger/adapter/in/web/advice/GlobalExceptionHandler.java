@@ -12,6 +12,9 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 import com.titan.ledger.core.domain.exception.AccountNotFoundException;
 import com.titan.ledger.core.domain.exception.InsufficientFundsException;
 
+import io.swagger.v3.oas.annotations.Hidden;
+
+@Hidden
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
