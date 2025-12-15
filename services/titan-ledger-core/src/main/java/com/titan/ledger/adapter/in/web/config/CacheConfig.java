@@ -9,6 +9,7 @@ import org.springframework.boot.cache.autoconfigure.RedisCacheManagerBuilderCust
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
@@ -20,22 +21,28 @@ import java.time.Duration;
 public class CacheConfig {
 
     @Bean
-    public RedisCacheConfiguration cacheConfiguration() {
-        // 1. Criamos um ObjectMapper poderoso
+    @Primary
+    public ObjectMapper objectMapper() {
         ObjectMapper objectMapper = new ObjectMapper();
         
-        // Habilita suporte a Instant/LocalDateTime (Isso corrige o seu erro 500!)
+        // Suporte a Datas
         objectMapper.registerModule(new JavaTimeModule());
         objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         
-        // Habilita salvar o tipo da classe no JSON (para saber deserializar depois)
+        // --- A CORREÇÃO ESTÁ AQUI ---
+        // Mudamos de NON_FINAL para EVERYTHING para suportar Java Records
         objectMapper.activateDefaultTyping(
                 objectMapper.getPolymorphicTypeValidator(),
-                ObjectMapper.DefaultTyping.NON_FINAL,
+                ObjectMapper.DefaultTyping.EVERYTHING, 
                 JsonTypeInfo.As.PROPERTY
         );
+        
+        return objectMapper;
+    }
 
-        // 2. Criamos o Serializador usando esse Mapper
+    @Bean
+    public RedisCacheConfiguration cacheConfiguration(ObjectMapper objectMapper) {
+        // Usa o Mapper configurado com EVERYTHING
         GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(objectMapper);
 
         return RedisCacheConfiguration.defaultCacheConfig()
@@ -45,17 +52,8 @@ public class CacheConfig {
     }
 
     @Bean
-    public RedisCacheManagerBuilderCustomizer redisCacheManagerBuilderCustomizer() {
-        // Precisamos recriar o serializador aqui ou extrair para um Bean separado
-        // Para simplificar, vamos instanciar igual acima (em prod, extraia o serializer para um @Bean)
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new JavaTimeModule());
-        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        objectMapper.activateDefaultTyping(
-                objectMapper.getPolymorphicTypeValidator(),
-                ObjectMapper.DefaultTyping.NON_FINAL,
-                JsonTypeInfo.As.PROPERTY
-        );
+    public RedisCacheManagerBuilderCustomizer redisCacheManagerBuilderCustomizer(ObjectMapper objectMapper) {
+        // Reutiliza o mesmo serializer
         GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(objectMapper);
 
         return (builder) -> builder

@@ -1,29 +1,24 @@
 package com.titan.ledger.core.service;
 
-import java.math.BigDecimal;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.titan.ledger.adapter.out.persistence.*;
+import com.titan.ledger.core.domain.exception.AccountNotFoundException;
+import com.titan.ledger.core.domain.exception.InsufficientFundsException;
+import com.titan.ledger.core.domain.model.*;
+import com.titan.ledger.core.usecase.TransferFundsUseCase;
+import com.titan.ledger.core.usecase.dto.TransferFundsCommand;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.titan.ledger.adapter.out.persistence.AccountRepository;
-import com.titan.ledger.adapter.out.persistence.IdempotencyRepository;
-import com.titan.ledger.adapter.out.persistence.LedgerRepository;
-import com.titan.ledger.adapter.out.persistence.TransactionRepository;
-import com.titan.ledger.core.domain.exception.AccountNotFoundException;
-import com.titan.ledger.core.domain.exception.InsufficientFundsException;
-import com.titan.ledger.core.domain.model.Account;
-import com.titan.ledger.core.domain.model.IdempotencyKey;
-import com.titan.ledger.core.domain.model.LedgerEntry;
-import com.titan.ledger.core.domain.model.OperationType;
-import com.titan.ledger.core.domain.model.Transaction;
-import com.titan.ledger.core.domain.model.TransactionStatus;
-import com.titan.ledger.core.usecase.TransferFundsUseCase;
-import com.titan.ledger.core.usecase.dto.TransferFundsCommand;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class TransferService implements TransferFundsUseCase {
@@ -31,19 +26,30 @@ public class TransferService implements TransferFundsUseCase {
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
     private final LedgerRepository ledgerRepository;
-    private final IdempotencyRepository idempotencyRepository; 
+    private final IdempotencyRepository idempotencyRepository;
+    private final OutboxRepository outboxRepository; // Repositório da Outbox
     private final StringRedisTemplate redisTemplate;
+    
+    // Mapper exclusivo para gerar JSON limpo na Outbox (sem tipos Java)
+    private final ObjectMapper eventMapper; 
 
-    public TransferService(AccountRepository accountRepository, 
+    public TransferService(AccountRepository accountRepository,
                            TransactionRepository transactionRepository,
-                           LedgerRepository ledgerRepository, 
+                           LedgerRepository ledgerRepository,
                            IdempotencyRepository idempotencyRepository,
+                           OutboxRepository outboxRepository,
                            StringRedisTemplate redisTemplate) {
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
         this.ledgerRepository = ledgerRepository;
         this.idempotencyRepository = idempotencyRepository;
+        this.outboxRepository = outboxRepository;
         this.redisTemplate = redisTemplate;
+
+        // Configuração Manual do Mapper para garantir JSON interoperável (Limpo)
+        this.eventMapper = new ObjectMapper();
+        this.eventMapper.registerModule(new JavaTimeModule()); // Suporte a Instant
+        this.eventMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Datas como ISO-8601 String
     }
 
     @Override
@@ -55,10 +61,8 @@ public class TransferService implements TransferFundsUseCase {
         @CacheEvict(value = "statements", key = "#command.toAccountId() + '::0'")
     })
     public UUID execute(TransferFundsCommand command) {
-        // 1. IDEMPOTENCY CHECK (Redis Primeiro, depois Banco)
+        // 1. IDEMPOTENCY CHECK (Redis Primeiro)
         if (command.idempotencyKey() != null) {
-            
-            // Check Redis
             String cachedTxId = redisTemplate.opsForValue().get("idem::" + command.idempotencyKey());
             if (cachedTxId != null) {
                 return UUID.fromString(cachedTxId);
@@ -68,7 +72,6 @@ public class TransferService implements TransferFundsUseCase {
             return idempotencyRepository.findById(command.idempotencyKey())
                 .map(existing -> {
                     String uuid = extractUuidFromJson(existing.getResponseBody());
-                    // Popula o Redis para a próxima vez ser rápida
                     cacheIdempotencyKey(command.idempotencyKey(), uuid);
                     return UUID.fromString(uuid);
                 })
@@ -78,20 +81,15 @@ public class TransferService implements TransferFundsUseCase {
         return processNewTransfer(command);
     }
 
-    // Lógica principal de transferência
     private UUID processNewTransfer(TransferFundsCommand command) {
-        // DEADLOCK PREVENTION
+        // --- LOGICA DE NEGOCIO (Lock Pessimista) ---
         UUID firstLockId = command.fromAccountId().compareTo(command.toAccountId()) < 0
-                ? command.fromAccountId()
-                : command.toAccountId();
-
+                ? command.fromAccountId() : command.toAccountId();
         UUID secondLockId = command.fromAccountId().compareTo(command.toAccountId()) < 0
-                ? command.toAccountId()
-                : command.fromAccountId();
+                ? command.toAccountId() : command.fromAccountId();
 
         Account account1 = accountRepository.findByIdForUpdate(firstLockId)
                 .orElseThrow(() -> new AccountNotFoundException("Source account not found"));
-
         Account account2 = accountRepository.findByIdForUpdate(secondLockId)
                 .orElseThrow(() -> new AccountNotFoundException("Target account not found"));
 
@@ -109,9 +107,8 @@ public class TransferService implements TransferFundsUseCase {
             throw new InsufficientFundsException("Insufficient funds");
         }
 
-        Transaction transaction = new Transaction(
-                UUID.randomUUID().toString(),
-                command.description());
+        // --- TRANSAÇÃO E LEDGER ---
+        Transaction transaction = new Transaction(UUID.randomUUID().toString(), command.description());
         transaction.setStatus(TransactionStatus.COMPLETED);
         transactionRepository.save(transaction);
 
@@ -124,47 +121,60 @@ public class TransferService implements TransferFundsUseCase {
         accountRepository.save(fromAccount);
         accountRepository.save(toAccount);
 
-        LedgerEntry debitEntry = new LedgerEntry(
-                transaction, fromAccount, OperationType.DEBIT, command.amount(), newSourceBalance);
+        ledgerRepository.save(new LedgerEntry(transaction, fromAccount, OperationType.DEBIT, command.amount(), newSourceBalance));
+        ledgerRepository.save(new LedgerEntry(transaction, toAccount, OperationType.CREDIT, command.amount(), newTargetBalance));
 
-        LedgerEntry creditEntry = new LedgerEntry(
-                transaction, toAccount, OperationType.CREDIT, command.amount(), newTargetBalance);
-
-        ledgerRepository.save(debitEntry);
-        ledgerRepository.save(creditEntry);
-
-        // 2. SALVAR IDEMPOTÊNCIA (Se houver chave)
-        if (command.idempotencyKey() != null) {
-            // Formata o JSON manualmente: {"transactionId": "UUID"}
-            String jsonBody = String.format("{\"transactionId\": \"%s\"}", transaction.getId());
-
-            // Salva no Postgres (AQUI ESTAVA O ERRO DE PLACEHOLDER '...')
-            IdempotencyKey key = new IdempotencyKey(
-                command.idempotencyKey(),
-                200,
-                jsonBody
+        // --- OUTBOX PATTERN (Salvar Evento Limpo) ---
+        try {
+            TransferCreatedEvent eventPayload = new TransferCreatedEvent(
+                transaction.getId().toString(),
+                fromAccount.getId().toString(),
+                toAccount.getId().toString(),
+                command.amount(),
+                transaction.getCreatedAt()
             );
-            idempotencyRepository.save(key);
 
-            // Salva no Redis
+            // Usa o eventMapper local para gerar JSON limpo: {"amount": 100.00}
+            String jsonPayload = eventMapper.writeValueAsString(eventPayload);
+
+            OutboxEvent outboxEvent = new OutboxEvent(
+                "ACCOUNT",
+                fromAccount.getId().toString(),
+                "TRANSFER_CREATED",
+                jsonPayload
+            );
+            
+            outboxRepository.save(outboxEvent);
+
+        } catch (Exception e) {
+            // Se falhar a serialização, rollback em tudo para garantir consistência
+            throw new RuntimeException("Failed to create outbox event", e);
+        }
+
+        // --- SAVE IDEMPOTENCY ---
+        if (command.idempotencyKey() != null) {
+            String jsonBody = String.format("{\"transactionId\": \"%s\"}", transaction.getId());
+            idempotencyRepository.save(new IdempotencyKey(command.idempotencyKey(), 200, jsonBody));
             cacheIdempotencyKey(command.idempotencyKey(), transaction.getId().toString());
         }
 
         return transaction.getId();
     }
 
-    // Método auxiliar para salvar no Redis
     private void cacheIdempotencyKey(String key, String txId) {
-        redisTemplate.opsForValue().set(
-                "idem::" + key,
-                txId,
-                24, TimeUnit.HOURS);
+        redisTemplate.opsForValue().set("idem::" + key, txId, 24, TimeUnit.HOURS);
     }
 
-    // Método auxiliar para extrair UUID do JSON (AQUI ESTAVA O ERRO DE MÉTODO FALTANDO)
     private String extractUuidFromJson(String json) {
-        // Remove {"transactionId": " e "}
-        // É um parse manual simples para evitar importar Jackson aqui só pra isso
         return json.replace("{\"transactionId\": \"", "").replace("\"}", "");
     }
+
+    // Record interno para representar o Payload do evento
+    record TransferCreatedEvent(
+        String transactionId,
+        String fromAccountId,
+        String toAccountId,
+        BigDecimal amount,
+        Instant timestamp
+    ) {}
 }
