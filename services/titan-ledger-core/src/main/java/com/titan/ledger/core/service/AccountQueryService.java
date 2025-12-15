@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ public class AccountQueryService implements GetAccountBalanceUseCase {
 
 
     @Override
+    @Cacheable(value = "account", key = "#accountId", unless = "#result == null")
     public AccountResponse execute(UUID accountId) {
         // Using standard repo, for now
 
@@ -62,6 +64,12 @@ public class AccountQueryService implements GetAccountBalanceUseCase {
     }
 
     // extrato paginado
+    @Cacheable(
+        value = "statements",
+        key = "#accountId + '::' + #pageable.pageNumber",
+        condition = "pageable.pageNumber == 0",
+        unless = "#result.isEmpty"
+    )
     public Page<StatementEntryResponse> getStatement(UUID accountId, Pageable pageable){
 
         if (!accountRepository.existsById(accountId)) {

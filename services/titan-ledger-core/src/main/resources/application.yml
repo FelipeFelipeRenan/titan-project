@@ -36,6 +36,17 @@ spring:
     consumer:
       group-id: titan-ledger-group
       auto-offset-reset: earliest
+  
+  cache:
+    type: redis
+    redis:
+      time-to-live: 600000 # expira o cache após 10 minutos (600000 ms)
+  
+  data:
+    redis:
+      host: localhost
+      port: 6379
+    
 
 management:
   otlp:
