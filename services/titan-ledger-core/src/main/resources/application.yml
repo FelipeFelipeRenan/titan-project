@@ -57,5 +57,18 @@ management:
     export:
       otlp:
         enabled: false # Desliga o envio de traces por enquanto
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
 
+  metrics:
+    web:
+      server:
+        requests:
+          autotime:
+            enabled: true
 # Nível de Log para Debugar o Swagger

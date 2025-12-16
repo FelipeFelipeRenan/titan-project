@@ -40,10 +40,19 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     ProblemDetail handleGeneralError(Exception e) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "An internal error occurred.");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+                "An internal error occurred.");
         problem.setTitle("Internal Server Error");
         problem.setProperty("timestamp", Instant.now());
         // Em produção, logar o 'e' aqui com Logger.error()
+        return problem;
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    ProblemDetail handleIllegalArgument(IllegalArgumentException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+        problem.setTitle("Invalid Argument");
+        problem.setType(URI.create("https://titan-ledger.com/errors/bad-request"));
         return problem;
     }
 }
