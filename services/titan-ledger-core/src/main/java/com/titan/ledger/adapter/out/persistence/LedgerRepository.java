@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import com.titan.ledger.core.domain.model.LedgerEntry;
+import com.titan.ledger.core.domain.model.Transaction;
 
 @Repository
 public interface LedgerRepository extends JpaRepository<LedgerEntry, UUID> {
@@ -41,5 +42,7 @@ public interface LedgerRepository extends JpaRepository<LedgerEntry, UUID> {
             GROUP BY l.account_id
             """, nativeQuery = true)
     List<BalanceSummary> getBalancesFromLedger();
+
+    List<LedgerEntry> findByTransaction(Transaction transaction);
 
 }

@@ -32,6 +32,9 @@ public class Transaction {
     @Column(name = "created_at")
     private Instant createdAt;
 
+    @Column(name = "reverted_by_transaction_id")
+    private UUID revertedByTransactionId;
+
     public Transaction() {
     }
 
@@ -80,6 +83,14 @@ public class Transaction {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public UUID getRevertedByTransactionId() {
+        return revertedByTransactionId;
+    }
+
+    public void setRevertedByTransactionId(UUID revertedByTransactionId) {
+        this.revertedByTransactionId = revertedByTransactionId;
     }
 
 }

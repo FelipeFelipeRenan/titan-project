@@ -83,7 +83,7 @@ public class AccountQueryService implements GetAccountBalanceUseCase {
     private StatementEntryResponse mapToStatementResponse(LedgerEntry entry) {
         return new StatementEntryResponse(
             entry.getTransaction().getId(),
-            entry.getType().name(),
+            entry.getOperationType().name(),
             entry.getAmount(),
             entry.getBalanceSnapshot(),
             entry.getTransaction().getDescription(),

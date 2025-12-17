@@ -74,19 +74,19 @@ public class LedgerEntry {
         this.transaction = transaction;
     }
 
-    public Account getaccount() {
+    public Account getAccount() {
         return account;
     }
 
-    public void setaccount(Account account) {
+    public void setAccount(Account account) {
         this.account = account;
     }
 
-    public OperationType getType() {
+    public OperationType getOperationType() {
         return type;
     }
 
-    public void setType(OperationType type) {
+    public void setOperationType(OperationType type) {
         this.type = type;
     }
 
