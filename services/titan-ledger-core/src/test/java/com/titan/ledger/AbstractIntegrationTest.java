@@ -1,31 +1,32 @@
 package com.titan.ledger;
 
 import com.redis.testcontainers.RedisContainer;
+import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureWebTestsClient
-@Testcontainers
+@AutoConfigureWebTestClient
+// [CORREÇÃO] Removemos @Testcontainers para evitar que o JUnit reinicie o banco a cada teste
 public abstract class AbstractIntegrationTest {
 
-    // SOBE O POSTGRES REAL
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
+    // Instanciamos os containers como static final
+    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
             .withDatabaseName("titan_test")
             .withUsername("test")
             .withPassword("test");
 
-    // SOBE O REDIS REAL
-    @Container
-    static RedisContainer redis = new RedisContainer(DockerImageName.parse("redis:7-alpine"));
+    static final RedisContainer redis = new RedisContainer(DockerImageName.parse("redis:7-alpine"));
 
-    // INJETA AS CONFIGURAÇÕES NO SPRING (Substitui o application.properties)
+    // [CORREÇÃO] Iniciamos manualmente para garantir que rodem como Singleton (uma vez por bateria de testes)
+    static {
+        postgres.start();
+        redis.start();
+    }
+
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);

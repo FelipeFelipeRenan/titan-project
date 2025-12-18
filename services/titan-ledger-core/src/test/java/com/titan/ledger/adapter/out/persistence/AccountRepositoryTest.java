@@ -1,40 +1,40 @@
 package com.titan.ledger.adapter.out.persistence;
 
+import com.titan.ledger.AbstractIntegrationTest;
+import com.titan.ledger.core.domain.model.Account;
+import com.titan.ledger.core.domain.model.AccountStatus; // [CORREÇÃO] Import necessário
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
 import java.math.BigDecimal;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
-import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
-import com.titan.ledger.core.domain.model.Account;
-
-@DataJpaTest
-@Testcontainers
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-class AccountRepositoryTest {
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine");
+class AccountRepositoryTest extends AbstractIntegrationTest {
 
     @Autowired
     private AccountRepository accountRepository;
+    
+    @BeforeEach
+    void setup() {
+        accountRepository.deleteAll();
+    }
 
     @Test
     @DisplayName("Should save an Account and find it by ClientID")
     void shouldSaveAndFindAccount() {
         String clientId = "user-123";
         String currency = "BRL";
-        // Lembre-se de ter adicionado o construtor na entidade Account como mencionado anteriormente
-        Account newAccount = new Account(clientId, currency);
+        
+        Account newAccount = new Account();
+        newAccount.setClientId(clientId);
+        newAccount.setCurrency(currency);
+        newAccount.setBalance(BigDecimal.ZERO);
+        // [CORREÇÃO] É obrigatório definir o status, senão o banco recusa (DataIntegrityViolation)
+        newAccount.setStatus(AccountStatus.ACTIVE); 
 
         Account savedAccount = accountRepository.save(newAccount);
 
