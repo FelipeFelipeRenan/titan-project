@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -33,9 +35,13 @@ import com.titan.ledger.core.usecase.dto.TransferFundsCommand;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 
 @Service
 public class TransferService implements TransferFundsUseCase {
+
+    private static final Logger logger = LoggerFactory.getLogger(TransferService.class);
 
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
@@ -44,6 +50,7 @@ public class TransferService implements TransferFundsUseCase {
     private final OutboxRepository outboxRepository; // Repositório da Outbox
     private final StringRedisTemplate redisTemplate;
     private final MeterRegistry meterRegistry;
+    private final Tracer tracer;
 
     // Mapper exclusivo para gerar JSON limpo na Outbox (sem tipos Java)
     private final ObjectMapper eventMapper;
@@ -54,7 +61,7 @@ public class TransferService implements TransferFundsUseCase {
             IdempotencyRepository idempotencyRepository,
             OutboxRepository outboxRepository,
             StringRedisTemplate redisTemplate,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry, Tracer tracer) {
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
         this.ledgerRepository = ledgerRepository;
@@ -62,6 +69,7 @@ public class TransferService implements TransferFundsUseCase {
         this.outboxRepository = outboxRepository;
         this.redisTemplate = redisTemplate;
         this.meterRegistry = meterRegistry;
+        this.tracer = tracer;
 
         // Configuração Manual do Mapper para garantir JSON interoperável (Limpo)
         this.eventMapper = new ObjectMapper();
@@ -79,6 +87,8 @@ public class TransferService implements TransferFundsUseCase {
             @CacheEvict(value = "statements", key = "#command.toAccountId() + '::0'")
     })
     public UUID execute(TransferFundsCommand command) {
+        logger.info("💸 Iniciando Transferência. From: {} | To: {} | Valor: {}",
+                command.fromAccountId(), command.toAccountId(), command.amount());
         // 1. IDEMPOTENCY CHECK (Redis Primeiro)
         if (command.idempotencyKey() != null) {
             String cachedTxId = redisTemplate.opsForValue().get("idem::" + command.idempotencyKey());
@@ -146,6 +156,13 @@ public class TransferService implements TransferFundsUseCase {
         ledgerRepository.save(
                 new LedgerEntry(transaction, toAccount, OperationType.CREDIT, command.amount(), newTargetBalance));
 
+        Span currentSpan = tracer.currentSpan();
+        if (currentSpan != null) {
+            currentSpan.tag("business.transactionId", transaction.getId().toString());
+            currentSpan.tag("business.amount", command.amount().toString());
+        }
+
+        logger.info("✅ Transação Realizada com Sucesso! ID: {}", transaction.getId());
         // --- OUTBOX PATTERN (Salvar Evento Limpo) ---
         try {
             TransferCreatedEvent eventPayload = new TransferCreatedEvent(
@@ -168,6 +185,8 @@ public class TransferService implements TransferFundsUseCase {
 
         } catch (Exception e) {
             // Se falhar a serialização, rollback em tudo para garantir consistência
+
+            logger.error("❌ Erro ao serializar evento Outbox", e);
             throw new RuntimeException("Failed to create outbox event", e);
         }
 
@@ -179,12 +198,12 @@ public class TransferService implements TransferFundsUseCase {
         }
 
         Counter.builder("titan.ledger.transfer.count")
-            .description("Number of successful transfers")
-            .register(meterRegistry)
-            .increment();
+                .description("Number of successful transfers")
+                .register(meterRegistry)
+                .increment();
 
         meterRegistry.counter("titan.ledger.transfer.amount.total")
-            .increment(command.amount().doubleValue());
+                .increment(command.amount().doubleValue());
 
         return transaction.getId();
     }

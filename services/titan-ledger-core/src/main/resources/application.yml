@@ -1,67 +1,57 @@
 server:
   port: 8081
   error:
-    include-message: always
     include-binding-error: always
     include-exception: true
     include-stacktrace: always
+    include-message: always
 
 spring:
   application:
     name: titan-ledger-core
 
-  # --- CONFIGURAÇÃO DE BANCO DE DADOS ---
+  # --- BANCO DE DADOS ---
   datasource:
     url: jdbc:postgresql://localhost:5432/titan_ledger
     username: titan_user
     password: titan_password
     driver-class-name: org.postgresql.Driver
 
-  # --- JPA / HIBERNATE ---
+  # --- JPA ---
   jpa:
     database: postgresql
     database-platform: org.hibernate.dialect.PostgreSQLDialect
-    # IMPORTANTE: Desligamos o ddl-auto porque quem manda no schema é o Flyway
     hibernate:
       ddl-auto: validate
-    show-sql: true # Útil para debug no começo
+    show-sql: true
     properties:
       hibernate:
         format_sql: true
 
-  # --- FLYWAY (MIGRAÇÕES) ---
+  # --- MIGRATIONS ---
   flyway:
     enabled: true
-    # Se o banco não estiver vazio, o Flyway reclama. Isso ajuda em dev.
     baseline-on-migrate: true
 
-  # --- KAFKA (Preparo inicial) ---
+  # --- KAFKA ---
   kafka:
     bootstrap-servers: localhost:9092
     consumer:
       group-id: titan-ledger-group
       auto-offset-reset: earliest
-  
+
+  # --- CACHE ---
   cache:
     type: redis
     redis:
-      time-to-live: 600000 # expira o cache após 10 minutos (600000 ms)
-  
+      time-to-live: 600000
   data:
     redis:
       host: localhost
       port: 6379
-    
 
+# --- OBSERVABILITY & METRICS ---
 management:
-  otlp:
-    metrics:
-      export:
-        enabled: false # Desliga o envio de métricas por enquanto
-  tracing:
-    export:
-      otlp:
-        enabled: false # Desliga o envio de traces por enquanto
   endpoints:
     web:
       exposure:
@@ -69,6 +59,23 @@ management:
   endpoint:
     health:
       show-details: always
+  
+  # Desliga OTLP para não dar erro tentando achar collector, foca no Zipkin
+  otlp:
+    metrics:
+      export:
+        enabled: false
+    tracing:
+      export:
+        enabled: false
+  
+  # Configuração do Zipkin (Brave)
+  tracing:
+    sampling:
+      probability: 1.0 # 100% das requests
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
 
   metrics:
     web:
@@ -76,4 +83,16 @@ management:
         requests:
           autotime:
             enabled: true
-# Nível de Log para Debugar o Swagger
+
+# --- LOGS ---
+logging:
+  level:
+    root: INFO
+    com.titan.ledger: INFO
+    org.springframework.web: INFO
+    # Debug para ver se o Zipkin está enviando
+    zipkin2: DEBUG 
+    org.springframework.cloud.sleuth: DEBUG
+  pattern:
+    # ASPAS OBRIGATÓRIAS AQUI
+    level: '%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]'
