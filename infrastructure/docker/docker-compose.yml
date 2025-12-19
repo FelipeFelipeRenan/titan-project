@@ -15,7 +15,6 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - titan-network
-    # Robustez: O container só diz que está "pronto" quando o banco aceita conexões
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U titan_user -d titan_ledger"]
       interval: 10s
@@ -36,9 +35,16 @@ services:
       timeout: 5s
       retries: 5
 
+  # --- OBSERVABILITY (NOVO) ---
+  zipkin:
+    image: openzipkin/zipkin
+    container_name: titan_zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - titan-network
+
   # --- MESSAGE BROKER (KAFKA) ---
-  # Usando versão Kraft (sem Zookeeper) para ser mais moderno e leve
- # --- MESSAGE BROKER (KAFKA) ---
   kafka:
     image: apache/kafka:3.7.0
     container_name: titan_kafka
@@ -47,21 +53,9 @@ services:
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      
-      # 1. Definimos QUEM pode conectar (Listeners)
-      # CONTROLLER: Porta de gestão interna (9093)
-      # EXTERNAL: Porta para seu PC (9092)
-      # INTERNAL: Porta para o Kafka UI e containers (29092)
       KAFKA_LISTENERS: CONTROLLER://:9093,EXTERNAL://0.0.0.0:9092,INTERNAL://0.0.0.0:29092
-      
-      # 2. Definimos ONDE o cliente deve bater (Advertised Listeners)
-      # Se vier de fora -> localhost:9092
-      # Se vier de dentro -> kafka:29092
       KAFKA_ADVERTISED_LISTENERS: EXTERNAL://localhost:9092,INTERNAL://kafka:29092
-      
-      # 3. Mapeamento de Segurança (Protocol Map)
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,INTERNAL:PLAINTEXT
-      
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
@@ -73,7 +67,6 @@ services:
     networks:
       - titan-network
     healthcheck:
-      # Teste ajustado para o caminho correto do script na imagem apache/kafka
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
       interval: 10s
       timeout: 10s
@@ -88,7 +81,6 @@ services:
       - "8080:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: local
-      # IMPORTANTE: Aqui usamos o nome do serviço 'kafka' e a porta INTERNA '29092'
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
     depends_on:
       kafka:
