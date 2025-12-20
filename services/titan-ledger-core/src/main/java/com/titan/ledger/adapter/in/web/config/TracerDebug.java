@@ -12,21 +12,25 @@ public class TracerDebug {
     public CommandLineRunner checkTracer(ApplicationContext ctx) {
         return args -> {
             System.out.println("========================================");
-            System.out.println("🔍 DIAGNÓSTICO DO TRACING");
+            System.out.println("🔍 DIAGNÓSTICO DO TRACING (OpenTelemetry)");
             
-            boolean hasTracer = ctx.containsBean("tracer");
-            boolean hasBrave = ctx.containsBean("braveTracer");
+            boolean hasTracer = ctx.containsBean("tracer"); // Bean genérico do Micrometer
+            boolean hasOtel = ctx.containsBean("otelTracer"); // Bean específico do OTel
             
             System.out.println("Existe bean 'tracer'? " + hasTracer);
-            System.out.println("Existe bean 'braveTracer'? " + hasBrave);
+            System.out.println("Existe bean 'otelTracer'? " + hasOtel);
             
             if (hasTracer) {
                 Object tracer = ctx.getBean("tracer");
-                System.out.println("Classe do Tracer: " + tracer.getClass().getName());
+                System.out.println("Classe do Tracer Ativo: " + tracer.getClass().getName());
             } else {
-                System.out.println("❌ O Spring NÃO carregou nenhum Tracer!");
-                System.out.println("Possíveis causas: Dependência faltando ou Versão incompatível.");
+                System.out.println("❌ O Spring NÃO carregou o Tracer!");
             }
+
+            // Verifica se o exportador do Zipkin foi carregado
+            boolean hasZipkinExporter = ctx.containsBean("zipkinSpanExporter");
+            System.out.println("Exportador Zipkin Ativo? " + hasZipkinExporter);
+            
             System.out.println("========================================");
         };
     }

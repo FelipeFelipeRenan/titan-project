@@ -60,22 +60,15 @@ management:
     health:
       show-details: always
   
-  # Desliga OTLP para não dar erro tentando achar collector, foca no Zipkin
-  otlp:
-    metrics:
-      export:
-        enabled: false
-    tracing:
-      export:
-        enabled: false
-  
-  # Configuração do Zipkin (Brave)
+  # Configuração de Tracing
   tracing:
     sampling:
       probability: 1.0 # 100% das requests
+
+  # Configuração do Exportador Zipkin (usado pelo OTel)
   zipkin:
     tracing:
-      endpoint: http://titan_zipkin:9411/api/v2/spans
+      endpoint: http://localhost:9411/api/v2/spans
 
   metrics:
     web:
@@ -90,9 +83,8 @@ logging:
     root: INFO
     com.titan.ledger: INFO
     org.springframework.web: INFO
-    # Debug para ver se o Zipkin está enviando
-    zipkin2: DEBUG 
-    brave.Tracer: DEBUG
+    # Debug para OTel/Zipkin
+    io.opentelemetry: DEBUG 
+    org.springframework.boot.actuate.autoconfigure.tracing: DEBUG
   pattern:
-    # ASPAS OBRIGATÓRIAS AQUI
     level: '%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]'
