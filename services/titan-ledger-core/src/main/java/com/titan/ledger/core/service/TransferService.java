@@ -35,8 +35,8 @@ import com.titan.ledger.core.usecase.dto.TransferFundsCommand;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.tracing.Span;
-import io.micrometer.tracing.Tracer;
+// import io.micrometer.tracing.Span;
+// import io.micrometer.tracing.Tracer;
 
 @Service
 public class TransferService implements TransferFundsUseCase {
@@ -50,7 +50,6 @@ public class TransferService implements TransferFundsUseCase {
     private final OutboxRepository outboxRepository; // Repositório da Outbox
     private final StringRedisTemplate redisTemplate;
     private final MeterRegistry meterRegistry;
-    private final Tracer tracer;
 
     // Mapper exclusivo para gerar JSON limpo na Outbox (sem tipos Java)
     private final ObjectMapper eventMapper;
@@ -61,7 +60,7 @@ public class TransferService implements TransferFundsUseCase {
             IdempotencyRepository idempotencyRepository,
             OutboxRepository outboxRepository,
             StringRedisTemplate redisTemplate,
-            MeterRegistry meterRegistry, Tracer tracer) {
+            MeterRegistry meterRegistry) {
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
         this.ledgerRepository = ledgerRepository;
@@ -69,7 +68,6 @@ public class TransferService implements TransferFundsUseCase {
         this.outboxRepository = outboxRepository;
         this.redisTemplate = redisTemplate;
         this.meterRegistry = meterRegistry;
-        this.tracer = tracer;
 
         // Configuração Manual do Mapper para garantir JSON interoperável (Limpo)
         this.eventMapper = new ObjectMapper();
@@ -156,11 +154,11 @@ public class TransferService implements TransferFundsUseCase {
         ledgerRepository.save(
                 new LedgerEntry(transaction, toAccount, OperationType.CREDIT, command.amount(), newTargetBalance));
 
-        Span currentSpan = tracer.currentSpan();
-        if (currentSpan != null) {
-            currentSpan.tag("business.transactionId", transaction.getId().toString());
-            currentSpan.tag("business.amount", command.amount().toString());
-        }
+        // Span currentSpan = tracer.currentSpan();
+        // if (currentSpan != null) {
+        //     currentSpan.tag("business.transactionId", transaction.getId().toString());
+        //     currentSpan.tag("business.amount", command.amount().toString());
+        // }
 
         logger.info("✅ Transação Realizada com Sucesso! ID: {}", transaction.getId());
         // --- OUTBOX PATTERN (Salvar Evento Limpo) ---

@@ -75,7 +75,7 @@ management:
       probability: 1.0 # 100% das requests
   zipkin:
     tracing:
-      endpoint: http://localhost:9411/api/v2/spans
+      endpoint: http://titan_zipkin:9411/api/v2/spans
 
   metrics:
     web:
@@ -92,7 +92,7 @@ logging:
     org.springframework.web: INFO
     # Debug para ver se o Zipkin está enviando
     zipkin2: DEBUG 
-    org.springframework.cloud.sleuth: DEBUG
+    brave.Tracer: DEBUG
   pattern:
     # ASPAS OBRIGATÓRIAS AQUI
     level: '%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]'
