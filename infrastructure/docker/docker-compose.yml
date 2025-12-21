@@ -1,6 +1,26 @@
 name: titan-infrastructure
 
 services:
+
+  ledger-core:
+    build: ./../../services/titan-ledger-core # Constrói a imagem a partir do diretório atual
+    container_name: titan_ledger_core
+    ports:
+      - "8081:8081" # Expõe pra você acessar o Swagger
+    environment:
+      # Agora usamos os nomes dos containers, não localhost
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/titan_ledger
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - MANAGEMENT_ZIPKIN_TRACING_ENDPOINT=http://zipkin:9411/api/v2/spans
+      - MANAGEMENT_OTLP_TRACING_ENDPOINT=http://jaeger:4318/v1/traces
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - titan-network
   # --- BANCO DE DADOS (Source of Truth) ---
   postgres:
     image: postgres:15-alpine
@@ -34,15 +54,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # --- OBSERVABILITY (NOVO) ---
-  zipkin:
-    image: openzipkin/zipkin
-    container_name: titan_zipkin
-    ports:
-      - "9411:9411"
-    networks:
-      - titan-network
 
   # --- MESSAGE BROKER (KAFKA) ---
   kafka:
@@ -85,6 +96,47 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+    networks:
+      - titan-network
+    # --- OBSERVABILITY ---
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: titan_jaeger
+    ports:
+      - "16686:16686" # UI (Acesse em http://localhost:16686)
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - titan-network
+  # --- METRICS (PROMETHEUS) ---
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: titan_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      # Vamos criar esse arquivo no Passo 2
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # Permite acessar o Java rodando fora do Docker
+    networks:
+      - titan-network
+
+  # --- VISUALIZATION (GRAFANA) ---
+  grafana:
+    image: grafana/grafana:latest
+    container_name: titan_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin # Senha padrão
+    depends_on:
+      - prometheus
+      - jaeger
     networks:
       - titan-network
 

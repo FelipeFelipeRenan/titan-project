@@ -1,90 +1,70 @@
 server:
   port: 8081
-  error:
-    include-binding-error: always
-    include-exception: true
-    include-stacktrace: always
-    include-message: always
+  address: 0.0.0.0
 
 spring:
   application:
     name: titan-ledger-core
-
-  # --- BANCO DE DADOS ---
   datasource:
     url: jdbc:postgresql://localhost:5432/titan_ledger
     username: titan_user
     password: titan_password
     driver-class-name: org.postgresql.Driver
-
-  # --- JPA ---
   jpa:
-    database: postgresql
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: validate
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
-
-  # --- MIGRATIONS ---
   flyway:
     enabled: true
     baseline-on-migrate: true
-
-  # --- KAFKA ---
   kafka:
     bootstrap-servers: localhost:9092
     consumer:
       group-id: titan-ledger-group
       auto-offset-reset: earliest
-
-  # --- CACHE ---
-  cache:
-    type: redis
-    redis:
-      time-to-live: 600000
   data:
     redis:
-      host: localhost
+      host: redis
       port: 6379
 
-# --- OBSERVABILITY & METRICS ---
 management:
   endpoints:
     web:
       exposure:
+        # Habilita o endpoint que o Prometheus vai ler
         include: health,info,metrics,prometheus
-  endpoint:
-    health:
-      show-details: always
   
-  # Configuração de Tracing
+  # CONFIGURAÇÃO DO OPENTELEMETRY (OTLP) -> JAEGER management.opentelemetry.tracing.export.otlp.endpoint
+  otlp:
+    tracing:
+      endpoint: http://jeager:4318/v1/traces # Endpoint HTTP do Jaeger
+    metrics:
+      export:
+        enabled: false
+  
   tracing:
     sampling:
       probability: 1.0 # 100% das requests
-
-  # Configuração do Exportador Zipkin (usado pelo OTel)
-  zipkin:
-    tracing:
-      endpoint: http://localhost:9411/api/v2/spans
+    
+    # O Spring Boot 3/4 usa OTLP por padrão quando o starter está presente.
+    # Mas é bom garantir que o exportador esteja ativo.
+    exporter:
+      zipkin:
+        enabled: false # Garante que Zipkin está desligado
+      otlp:
+        enabled: true
 
   metrics:
-    web:
-      server:
-        requests:
-          autotime:
-            enabled: true
-
-# --- LOGS ---
+    tags:
+      application: ${spring.application.name} # Etiqueta todas as métricas com o nome do app
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true # Gera histogramas para vermos p95, p99 de latência
 logging:
   level:
     root: INFO
-    com.titan.ledger: INFO
-    org.springframework.web: INFO
-    # Debug para OTel/Zipkin
-    io.opentelemetry: DEBUG 
-    org.springframework.boot.actuate.autoconfigure.tracing: DEBUG
+    # Debug para ver se o autoconfig do OTel está rodando
+    io.opentelemetry.exporter: DEBUG
+    org.springframework.boot.autoconfigure.web.reactive.function.client: DEBUG
   pattern:
     level: '%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]'

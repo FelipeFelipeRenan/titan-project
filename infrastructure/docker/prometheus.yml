@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 5s     # Busca métricas a cada 5s (agressivo para dev, bom pra ver em tempo real)
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'titan_ledger_core'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      # Se você roda o Java na IDE/Terminal: usa host.docker.internal
+      # Se você roda o Java via Docker Compose: usa o nome do container (titan-ledger-core)
+      - targets: ['host.docker.internal:8081'] 
+        labels:
+          application: 'titan-ledger-core'
