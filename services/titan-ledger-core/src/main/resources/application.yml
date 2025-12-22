@@ -66,5 +66,6 @@ logging:
     # Debug para ver se o autoconfig do OTel está rodando
     io.opentelemetry.exporter: DEBUG
     org.springframework.boot.autoconfigure.web.reactive.function.client: DEBUG
+    io.micrometer.tracing: DEBUG
   pattern:
     level: '%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]'
