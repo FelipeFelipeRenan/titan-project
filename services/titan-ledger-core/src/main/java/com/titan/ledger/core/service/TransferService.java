@@ -156,8 +156,8 @@ public class TransferService implements TransferFundsUseCase {
 
         // Span currentSpan = tracer.currentSpan();
         // if (currentSpan != null) {
-        //     currentSpan.tag("business.transactionId", transaction.getId().toString());
-        //     currentSpan.tag("business.amount", command.amount().toString());
+        // currentSpan.tag("business.transactionId", transaction.getId().toString());
+        // currentSpan.tag("business.amount", command.amount().toString());
         // }
 
         logger.info("✅ Transação Realizada com Sucesso! ID: {}", transaction.getId());
@@ -211,7 +211,14 @@ public class TransferService implements TransferFundsUseCase {
     }
 
     private String extractUuidFromJson(String json) {
-        return json.replace("{\"transactionId\": \"", "").replace("\"}", "");
+        try {
+            // Maneira robusta: lê o JSON real
+            return eventMapper.readTree(json).get("transactionId").asText();
+        } catch (Exception e) {
+            logger.warn("Falha ao fazer parse do JSON de idempotência antigo, tentando fallback manual", e);
+            // Fallback para o seu método antigo se falhar
+            return json.replace("{\"transactionId\": \"", "").replace("\"}", "");
+        }
     }
 
     // Record interno para representar o Payload do evento

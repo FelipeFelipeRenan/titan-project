@@ -8,6 +8,8 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,43 +25,59 @@ public class ReconciliationJob {
     private final LedgerRepository ledgerRepository;
     private final AccountRepository accountRepository;
 
+    private static final int BATCH_SIZE = 1000;
+
     public ReconciliationJob(LedgerRepository ledgerRepository, AccountRepository accountRepository) {
         this.ledgerRepository = ledgerRepository;
         this.accountRepository = accountRepository;
     }
 
     @Scheduled(fixedDelay = 60000)
-    @Transactional(readOnly = true)
     public void runReconciliation() {
         logger.info("-------Starting Account Reconciliation Job--------");
 
-        List<LedgerRepository.BalanceSummary> ledgerBalances = ledgerRepository.getBalancesFromLedger();
+        int page = 0;
+        int totalDiscrepancies = 0;
+        Page<Account> accountPage;
 
-        Map<UUID, BigDecimal> calculatedMap = ledgerBalances.stream()
-                .collect(Collectors.toMap(
-                        LedgerRepository.BalanceSummary::getAccountId,
-                        LedgerRepository.BalanceSummary::getCalculatedBalance));
+        do {
+            accountPage = fetchPage(page);
+            List<Account> accounts = accountPage.getContent();
 
-        List<Account> accounts = accountRepository.findAll();
+            if (accounts.isEmpty())
+                break;
 
-        int discrepancies = 0;
+            List<UUID> accountsIds = accounts.stream().map(Account::getId).toList();
 
-        for (Account account : accounts) {
-            BigDecimal currentBalance = account.getBalance();
-            BigDecimal realBalance = calculatedMap.getOrDefault(account.getId(), BigDecimal.ZERO);
+            List<LedgerRepository.BalanceSummary> ledgerBalances = ledgerRepository.getBalancesForAccounts(accountsIds);
 
-            if (currentBalance.compareTo(realBalance) != 0) {
-                discrepancies++;
-                handleDiscrepancy(account.getId(), currentBalance, realBalance);
+            Map<UUID, BigDecimal> calculatedMap = ledgerBalances.stream()
+                    .collect(Collectors.toMap(
+                            LedgerRepository.BalanceSummary::getAccountId,
+                            LedgerRepository.BalanceSummary::getCalculatedBalance));
 
+            for (Account account : accounts) {
+                BigDecimal currentBalance = account.getBalance();
+
+                BigDecimal realBalance = calculatedMap.getOrDefault(account.getId(), BigDecimal.ZERO);
+
+                if (currentBalance.compareTo(realBalance) != 0) {
+                    totalDiscrepancies++;
+                    handleDiscrepancy(account.getId(), currentBalance, realBalance);
+                }
             }
 
-        }
+            page++;
 
-        if (discrepancies == 0) {
-            logger.info("✅ Reconciliation finished. All accounts are balanced.");
+            logger.debug("Processed page {}/{}", page, accountPage.getTotalPages());
+
+        } while (accountPage.hasNext());
+
+        if (totalDiscrepancies == 0) {
+            logger.info("✅ Reconciliation finished. Checked {} accounts. System Balanced.",
+                    accountPage.getTotalElements());
         } else {
-            logger.error("🚨 Reconciliation finished with {} discrepancies!", discrepancies);
+            logger.error("🚨 Reconciliation finished with {} discrepancies!", totalDiscrepancies);
         }
     }
 
@@ -71,5 +89,10 @@ public class ReconciliationJob {
                 accountId, current, real);
 
         // Sugestão futura: Salvar na tabela 'audit_logs'
+    }
+
+    @Transactional(readOnly = true)
+    protected Page<Account> fetchPage(int page) {
+        return accountRepository.findAll(PageRequest.of(page, BATCH_SIZE));
     }
 }
