@@ -27,7 +27,6 @@ func main() {
 	dbPassword := os.Getenv("DB_PASSWORD")
 	dbName := os.Getenv("DB_NAME")
 
-	fmt.Println("_______")
 	if dbHost == "" || dbUser == "" {
 		fmt.Printf("configurações de banco de dados insuficientes")
 		os.Exit(1)
@@ -47,6 +46,7 @@ func main() {
 
 		err := processBatch(conn)
 		if err != nil {
+			fmt.Printf("❌ ERRO FATAL: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -79,10 +79,13 @@ func processBatch(conn *pgx.Conn) error {
 		var evt Outbox
 
 		if err := rows.Scan(&evt.ID, &evt.Payload); err != nil {
+			rows.Close()
 			return fmt.Errorf("scan error: %w", err)
 		}
 		events = append(events, evt)
 	}
+
+	rows.Close()
 
 	if rows.Err() != nil {
 		return rows.Err()
@@ -94,9 +97,19 @@ func processBatch(conn *pgx.Conn) error {
 
 	fmt.Printf("🔄 Processando %d eventos...\n", len(events))
 
-	for _, e := range events{
+	for _, e := range events {
 		fmt.Printf("   >> Evento ID: %s | Payload: %s\n", e.ID, e.Payload)
+
+		_, err := tx.Exec(ctx, "UPDATE outbox_events SET processed = true WHERE id = $1", e.ID)
+		if err != nil {
+			return fmt.Errorf("erro ao atualizar ID %s: %w", e.ID, err)
+		}
 	}
 
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("erro no commit: %w", err)
+	}
+
+	fmt.Println("✅ Lote comitado com sucesso!")
+	return nil
 }
