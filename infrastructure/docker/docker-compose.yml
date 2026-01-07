@@ -22,6 +22,23 @@ services:
     networks:
       - titan-network
   # --- BANCO DE DADOS (Source of Truth) ---
+  outbox-worker:
+    build: ./../../services/titan-outbox-worker
+    container_name: titan-outbox-worker
+    ports:
+      - "8085"
+    environment:
+      - DB_OUTBOX_URL=postgresql://postgres:5432/titan_ledger
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=titan_user
+      - DB_PASSWORD=titan_password
+      - DB_NAME=titan_ledger
+    depends_on:
+       postgres:
+          condition: service_healthy
+    networks:
+      - titan-network
   postgres:
     image: postgres:15-alpine
     container_name: titan_db
