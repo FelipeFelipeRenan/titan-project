@@ -44,12 +44,14 @@ Titan Project is a high-performance, distributed ledger system designed for fina
 ### Running the System
 
 1. Clone the repository:
+
 ```bash
-git clone <repository-url>
+git clone <repository http or ssh link>
 cd titan-project
 ```
 
 2. Start all services using Docker Compose:
+
 ```bash
 cd infrastructure/docker
 docker-compose up --build
@@ -148,12 +150,14 @@ The project includes comprehensive testing:
 ### Building Services
 
 **For titan-ledger-core:**
+
 ```bash
 cd services/titan-ledger-core
 ./mvnw clean package
 ```
 
 **For titan-outbox-worker:**
+
 ```bash
 cd services/titan-outbox-worker
 go build -o app cmd/main.go
@@ -179,7 +183,7 @@ go build -o app cmd/main.go
 
 ## License
 
-[Specify license type here]
+MIT
 
 ## Support
 

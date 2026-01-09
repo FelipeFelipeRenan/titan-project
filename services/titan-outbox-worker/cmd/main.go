@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/segmentio/kafka-go"
 )
 
 type Outbox struct {
@@ -18,6 +19,8 @@ type Outbox struct {
 	Created       time.Time
 	processed     bool
 }
+
+var Topic string = "transfer-events"
 
 func main() {
 
@@ -40,21 +43,28 @@ func main() {
 	}
 	defer conn.Close(context.Background())
 
-	ticker := time.NewTicker(500 * time.Millisecond)
-	for t := range ticker.C {
-		fmt.Println("Tick at", t.Format("15:04:05"))
+	writer := &kafka.Writer{
+		Addr:                   kafka.TCP("kafka:29092"),
+		Topic:                  Topic,
+		Balancer:               &kafka.Hash{},
+		AllowAutoTopicCreation: true,
+	}
 
-		err := processBatch(conn)
+	defer writer.Close()
+
+	ticker := time.NewTicker(500 * time.Millisecond)
+	for range ticker.C {
+
+		err := processBatch(conn, writer)
 		if err != nil {
 			fmt.Printf("❌ ERRO FATAL: %v\n", err)
-			os.Exit(1)
 		}
 
 	}
 
 }
 
-func processBatch(conn *pgx.Conn) error {
+func processBatch(conn *pgx.Conn, writer *kafka.Writer) error {
 	ctx := context.Background()
 
 	tx, err := conn.Begin(ctx)
@@ -64,8 +74,7 @@ func processBatch(conn *pgx.Conn) error {
 
 	defer tx.Rollback(ctx)
 
-	query := "SELECT id, payload FROM outbox_events WHERE processed = false LIMIT 10 FOR UPDATE SKIP LOCKED"
-
+query := "SELECT id, aggregate_id, payload FROM outbox_events WHERE processed = false ORDER BY created_at ASC LIMIT 10 FOR UPDATE SKIP LOCKED"
 	rows, err := tx.Query(ctx, query)
 	if err != nil {
 		return err
@@ -78,7 +87,7 @@ func processBatch(conn *pgx.Conn) error {
 	for rows.Next() {
 		var evt Outbox
 
-		if err := rows.Scan(&evt.ID, &evt.Payload); err != nil {
+		if err := rows.Scan(&evt.ID, &evt.AggregateID ,  &evt.Payload); err != nil {
 			rows.Close()
 			return fmt.Errorf("scan error: %w", err)
 		}
@@ -100,7 +109,13 @@ func processBatch(conn *pgx.Conn) error {
 	for _, e := range events {
 		fmt.Printf("   >> Evento ID: %s | Payload: %s\n", e.ID, e.Payload)
 
-		_, err := tx.Exec(ctx, "UPDATE outbox_events SET processed = true WHERE id = $1", e.ID)
+		err := writer.WriteMessages(context.Background(),
+			kafka.Message{Key: []byte(e.AggregateID), Value: []byte(e.Payload)},
+		)
+		if err != nil {
+			return fmt.Errorf("failed to write message: %w", err)
+		}
+		_, err = tx.Exec(ctx, "UPDATE outbox_events SET processed = true WHERE id = $1", e.ID)
 		if err != nil {
 			return fmt.Errorf("erro ao atualizar ID %s: %w", e.ID, err)
 		}
